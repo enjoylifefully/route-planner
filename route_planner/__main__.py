@@ -300,7 +300,19 @@ def plot_route(
 ) -> None:
     path_coords: List[Tuple[float, float]] = []
     for start, end in zip(route_nodes, route_nodes[1:]):
-        segment = ox.shortest_path(graph, start, end, weight="length")
+        try:
+            segment = ox.shortest_path(graph, start, end, weight="length")
+        except nx.NetworkXNoPath:
+            segment = None
+
+        if segment is None:
+            start_coord = (graph.nodes[start]["y"], graph.nodes[start]["x"])
+            end_coord = (graph.nodes[end]["y"], graph.nodes[end]["x"])
+            if not path_coords or path_coords[-1] != start_coord:
+                path_coords.append(start_coord)
+            path_coords.append(end_coord)
+            continue
+
         for idx, node in enumerate(segment):
             lat = graph.nodes[node]["y"]
             lon = graph.nodes[node]["x"]
