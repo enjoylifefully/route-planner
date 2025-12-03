@@ -31,16 +31,34 @@ uv run python -m route_planner --num-trucks 4 --num-deliveries 20 --radius-m 150
 - `--num-trucks`: quantidade de depósitos/caminhões (`k`).
 - `--num-deliveries`: número total de entregas (`n`, deve ser ≥ `k`).
 - `--radius-m`: raio usado tanto para gerar os pontos quanto para baixar o grafo via OSMnx.
-- `--seed`: controla a geração pseudo-aleatória para reproduzir o cenário.
+- `--seed`: controla a geração pseudo-aleatória; se não for informado, o script
+  escolhe uma semente aleatória automaticamente e informa no terminal.
 
 ### Camadas do mapa
 
-O HTML final inclui duas camadas em um `LayerControl` do próprio Folium:
+O HTML final inclui várias camadas no `LayerControl` para enxergar cada etapa dos
+algoritmos:
 
-- **Pontos (sem rotas)**: mostra apenas depósitos e entregas para inspeção rápida.
-- **Rotas e pontos**: mesma camada de pontos, acrescida dos caminhos otimizados por caminhão.
+- **Pontos (sem rotas)**: depósitos e entregas em cinza.
+- **Clusters - distribuição inicial**: ligações (tracejadas) entre caminhões e
+  entregas antes de aplicar K-Means.
+- **Clusters - K-Means**: mesmas ligações, agora usando os grupos calculados.
+- **Rotas - ordem sequencial**: caminho percorrido caso o caminhão siga a
+  sequência original das entregas (pré 2-opt).
+- **Rotas - 2-opt**: resultado otimizando a ordem das visitas em cada grupo.
 
-Use o seletor no canto do mapa para alternar entre versões sem precisar rodar o script novamente.
+Ative/desative as camadas desejadas para comparar visualmente as melhorias em
+cada componente.
+
+### Comparando melhorias numéricas
+
+Além do mapa, o terminal imprime dois blocos com métricas:
+
+1. **Agrupamento** – distância total (linha reta) caminhão→entregas antes e
+   depois do K-Means.
+2. **Rotas** – comprimento real de cada rota na ordem original versus depois do
+   2-opt (em quilômetros e porcentagem de ganho), junto com a sequência final
+   das visitas.
 
 ## Personalização
 

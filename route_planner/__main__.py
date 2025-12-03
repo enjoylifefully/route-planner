@@ -1,6 +1,7 @@
 """Planejamento de rotas para k caminhões usando OSMnx, K-Means e 2-opt."""
 
 import argparse
+import secrets
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
@@ -11,7 +12,7 @@ import osmnx as ox
 
 from .clustering import cluster_deliveries
 from .models import Delivery, Truck
-from .route_optimizer import build_route, haversine
+from .route_optimizer import build_baseline_route, build_route, haversine
 
 OUTPUT_DIR = Path("output")
 CITY_CENTER = (-23.550520, -46.633308)
@@ -27,14 +28,33 @@ def main() -> None:
     )
 
     graph = build_graph(trucks + deliveries, dist=args.radius_m)
+
+    baseline_clusters = initial_cluster_assignment(deliveries, len(trucks))
+    baseline_centroids = compute_centroids(baseline_clusters)
+    baseline_assignments = match_clusters_to_trucks(trucks, baseline_centroids)
+
     clusters, centroids = cluster_deliveries(deliveries, len(trucks))
     assignments = match_clusters_to_trucks(trucks, centroids)
 
     folium_map = build_base_map(trucks, deliveries)
     points_layer = folium.FeatureGroup(name="Pontos (sem rotas)", show=True)
-    routes_layer = folium.FeatureGroup(name="Rotas e pontos", show=False)
-    points_layer.add_to(folium_map)
-    routes_layer.add_to(folium_map)
+    baseline_cluster_layer = folium.FeatureGroup(
+        name="Clusters - distribuição inicial", show=False
+    )
+    kmeans_cluster_layer = folium.FeatureGroup(name="Clusters - K-Means", show=False)
+    baseline_routes_layer = folium.FeatureGroup(
+        name="Rotas - ordem sequencial", show=False
+    )
+    routes_layer = folium.FeatureGroup(name="Rotas - 2-opt", show=True)
+
+    for layer in (
+        points_layer,
+        baseline_cluster_layer,
+        kmeans_cluster_layer,
+        baseline_routes_layer,
+        routes_layer,
+    ):
+        layer.add_to(folium_map)
 
     palette = [
         "red",
@@ -47,18 +67,73 @@ def main() -> None:
         "darkgreen",
     ]
     color_lookup = {
-        name: palette[idx % len(palette)] for idx, name in enumerate(assignments.keys())
+        truck.name: palette[idx % len(palette)] for idx, truck in enumerate(trucks)
     }
 
-    for truck_name, cluster_id in assignments.items():
-        truck = next(t for t in trucks if t.name == truck_name)
-        selected_deliveries = clusters[cluster_id]
-        route_nodes, ordered_points = build_route(graph, truck, selected_deliveries)
-        color = color_lookup[truck_name]
+    cluster_stats: List[Tuple[str, float, float]] = []
+    route_stats: List[Tuple[str, float, float, Sequence[str]]] = []
+
+    for truck in trucks:
+        color = color_lookup[truck.name]
+        baseline_cluster_id = baseline_assignments.get(truck.name)
+        baseline_deliveries = (
+            baseline_clusters.get(baseline_cluster_id, [])
+            if baseline_cluster_id is not None
+            else []
+        )
+        current_cluster_id = assignments.get(truck.name)
+        selected_deliveries = (
+            clusters.get(current_cluster_id, [])
+            if current_cluster_id is not None
+            else []
+        )
+
         plot_markers(points_layer, truck, selected_deliveries, "gray")
         plot_markers(routes_layer, truck, selected_deliveries, color)
-        plot_route(routes_layer, graph, route_nodes, color, truck_name)
-        print_summary(truck_name, ordered_points)
+        plot_cluster_connections(
+            baseline_cluster_layer,
+            truck,
+            baseline_deliveries,
+            color,
+            dash_array="6,6",
+            label_prefix="Baseline",
+        )
+        plot_cluster_connections(
+            kmeans_cluster_layer,
+            truck,
+            selected_deliveries,
+            color,
+            label_prefix="K-Means",
+        )
+
+        baseline_cost = assignment_cost(truck, baseline_deliveries)
+        optimized_cost = assignment_cost(truck, selected_deliveries)
+        cluster_stats.append((truck.name, baseline_cost, optimized_cost))
+
+        baseline_route = build_baseline_route(graph, truck, selected_deliveries)
+        optimized_route = build_route(graph, truck, selected_deliveries)
+        route_stats.append(
+            (
+                truck.name,
+                baseline_route.distance_m,
+                optimized_route.distance_m,
+                optimized_route.labels,
+            )
+        )
+
+        plot_route(
+            baseline_routes_layer,
+            graph,
+            baseline_route.nodes,
+            color,
+            truck.name,
+            dash_array="6,3",
+        )
+        plot_route(routes_layer, graph, optimized_route.nodes, color, truck.name)
+        print_summary(truck.name, optimized_route.labels)
+
+    print_cluster_stats(cluster_stats)
+    print_route_stats(route_stats)
 
     folium.LayerControl(collapsed=False).add_to(folium_map)
 
@@ -91,8 +166,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--seed",
         type=int,
-        default=42,
-        help="Semente para geração pseudo-aleatória",
+        default=None,
+        help="Semente para geração pseudo-aleatória (aleatória se não fornecida)",
     )
     args = parser.parse_args()
     if args.num_trucks <= 0:
@@ -101,6 +176,9 @@ def parse_args() -> argparse.Namespace:
         parser.error("--num-deliveries deve ser >= --num-trucks")
     if args.radius_m <= 0:
         parser.error("--radius-m deve ser positivo")
+    if args.seed is None:
+        args.seed = secrets.randbits(32)
+        print(f"Semente aleatória escolhida: {args.seed}")
     return args
 
 
@@ -160,6 +238,8 @@ def match_clusters_to_trucks(
 ) -> Dict[str, int]:
     pairs: List[Tuple[float, int, int]] = []
     for cluster_idx, (lat, lon) in enumerate(centroids):
+        if np.isnan(lat) or np.isnan(lon):
+            continue
         for truck_idx, truck in enumerate(trucks):
             distance = haversine((lat, lon), (truck.lat, truck.lon))
             pairs.append((distance, cluster_idx, truck_idx))
@@ -216,6 +296,7 @@ def plot_route(
     route_nodes: Sequence[int],
     color: str,
     truck_name: str,
+    dash_array: str | None = None,
 ) -> None:
     path_coords: List[Tuple[float, float]] = []
     for start, end in zip(route_nodes, route_nodes[1:]):
@@ -232,12 +313,100 @@ def plot_route(
         color=color,
         tooltip=f"Rota {truck_name}",
         weight=4,
+        dash_array=dash_array,
     ).add_to(layer)
 
 
 def print_summary(truck_name: str, ordered_points: Sequence[str]) -> None:
     readable = " -> ".join(ordered_points)
     print(f"Rota otimizada ({truck_name}): {readable}")
+
+
+def plot_cluster_connections(
+    layer: folium.FeatureGroup,
+    truck: Truck,
+    deliveries: Sequence[Delivery],
+    color: str,
+    *,
+    dash_array: str | None = None,
+    label_prefix: str,
+) -> None:
+    if not deliveries:
+        return
+    for delivery in deliveries:
+        folium.PolyLine(
+            locations=[(truck.lat, truck.lon), (delivery.lat, delivery.lon)],
+            color=color,
+            weight=2,
+            opacity=0.8,
+            dash_array=dash_array,
+            tooltip=f"{label_prefix}: {truck.name} -> {delivery.code}",
+        ).add_to(layer)
+
+
+def initial_cluster_assignment(
+    deliveries: Sequence[Delivery], n_clusters: int
+) -> Dict[int, List[Delivery]]:
+    clusters: Dict[int, List[Delivery]] = {idx: [] for idx in range(n_clusters)}
+    for idx, delivery in enumerate(deliveries):
+        clusters[idx % n_clusters].append(delivery)
+    return clusters
+
+
+def compute_centroids(clusters: Dict[int, Sequence[Delivery]]) -> np.ndarray:
+    centroids = np.zeros((len(clusters), 2), dtype=float)
+    for cluster_idx, cluster_deliveries in clusters.items():
+        if cluster_deliveries:
+            coords = np.array([(d.lat, d.lon) for d in cluster_deliveries])
+            centroids[cluster_idx] = coords.mean(axis=0)
+        else:
+            centroids[cluster_idx] = np.array([np.nan, np.nan])
+    return centroids
+
+
+def assignment_cost(truck: Truck, deliveries: Sequence[Delivery]) -> float:
+    return float(
+        sum(haversine((truck.lat, truck.lon), (d.lat, d.lon)) for d in deliveries)
+    )
+
+
+def print_cluster_stats(stats: Sequence[Tuple[str, float, float]]) -> None:
+    if not stats:
+        return
+    print("\n== Agrupamento: baseline vs K-Means ==")
+    total_baseline = sum(b for _, b, _ in stats)
+    total_optimized = sum(o for _, _, o in stats)
+    for truck_name, baseline_cost, optimized_cost in stats:
+        improvement = baseline_cost - optimized_cost
+        pct = (improvement / baseline_cost * 100) if baseline_cost else 0.0
+        print(
+            f"{truck_name}: {baseline_cost / 1000:.2f} km -> {optimized_cost / 1000:.2f} km "
+            f"(Δ {improvement / 1000:.2f} km, {pct:.1f}%)"
+        )
+    print(
+        f"Total: {total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
+        f"(Δ {(total_baseline - total_optimized) / 1000:.2f} km)"
+    )
+
+
+def print_route_stats(stats: Sequence[Tuple[str, float, float, Sequence[str]]]) -> None:
+    if not stats:
+        return
+    print("\n== Rotas: antes vs 2-opt ==")
+    total_baseline = sum(b for _, b, _, _ in stats)
+    total_optimized = sum(o for _, _, o, _ in stats)
+    for truck_name, baseline_len, optimized_len, ordered_points in stats:
+        improvement = baseline_len - optimized_len
+        pct = (improvement / baseline_len * 100) if baseline_len else 0.0
+        readable = " -> ".join(ordered_points)
+        print(
+            f"{truck_name}: {baseline_len / 1000:.2f} km -> {optimized_len / 1000:.2f} km "
+            f"(Δ {improvement / 1000:.2f} km, {pct:.1f}%) | Sequência: {readable}"
+        )
+    print(
+        f"Total: {total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
+        f"(Δ {(total_baseline - total_optimized) / 1000:.2f} km)"
+    )
 
 
 if __name__ == "__main__":

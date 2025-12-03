@@ -1,5 +1,8 @@
-"""Otimização de rotas com 2-opt (via python-tsp)."""
+"""Rotinas relacionadas à otimização de rotas (baseline e 2-opt)."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import List, Sequence, Tuple
 
 import networkx as nx
@@ -10,9 +13,16 @@ from python_tsp.heuristics import solve_tsp_local_search
 from .models import Delivery, Truck
 
 
+@dataclass(frozen=True)
+class RouteResult:
+    nodes: List[int]
+    labels: List[str]
+    distance_m: float
+
+
 def build_route(
     graph: nx.MultiDiGraph, truck: Truck, deliveries: Sequence[Delivery]
-) -> Tuple[List[int], List[str]]:
+) -> RouteResult:
     """Resolve a ordem ótima de visitas usando 2-opt e retorna nós e etiquetas."""
 
     nodes = [nearest_node(graph, truck.lat, truck.lon)]
@@ -28,7 +38,26 @@ def build_route(
 
     route_nodes = [nodes[idx] for idx in ordered_indices]
     ordered_codes = [ordered_codes[idx] for idx in ordered_indices]
-    return route_nodes, ordered_codes
+    distance = compute_path_length(graph, route_nodes)
+    return RouteResult(route_nodes, ordered_codes, distance)
+
+
+def build_baseline_route(
+    graph: nx.MultiDiGraph, truck: Truck, deliveries: Sequence[Delivery]
+) -> RouteResult:
+    """Gera rota simples (ordem sequencial) para comparação com 2-opt."""
+
+    nodes = [nearest_node(graph, truck.lat, truck.lon)]
+    ordered_codes = [f"Saída {truck.name}"]
+
+    for delivery in deliveries:
+        nodes.append(nearest_node(graph, delivery.lat, delivery.lon))
+        ordered_codes.append(delivery.code)
+
+    nodes.append(nodes[0])
+    ordered_codes.append(ordered_codes[0])
+    distance = compute_path_length(graph, nodes)
+    return RouteResult(nodes, ordered_codes, distance)
 
 
 def nearest_node(graph: nx.MultiDiGraph, lat: float, lon: float) -> int:
@@ -51,6 +80,19 @@ def compute_distance_matrix(graph: nx.MultiDiGraph, nodes: Sequence[int]) -> np.
                 )
             matrix[i, j] = matrix[j, i] = float(length)
     return matrix
+
+
+def compute_path_length(graph: nx.MultiDiGraph, route_nodes: Sequence[int]) -> float:
+    total = 0.0
+    for start, end in zip(route_nodes, route_nodes[1:]):
+        try:
+            total += nx.shortest_path_length(graph, start, end, weight="length")
+        except nx.NetworkXNoPath:
+            total += haversine(
+                (graph.nodes[start]["y"], graph.nodes[start]["x"]),
+                (graph.nodes[end]["y"], graph.nodes[end]["x"]),
+            )
+    return float(total)
 
 
 def reorder_cycle(permutation: Sequence[int], start_index: int) -> List[int]:
