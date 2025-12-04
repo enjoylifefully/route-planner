@@ -168,7 +168,7 @@ def main() -> None:
     folium.LayerControl(collapsed=False).add_to(folium_map)
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_file = OUTPUT_DIR / "map.html"
+    output_file = next_available_map(OUTPUT_DIR)
     folium_map.save(str(output_file))
     print(f"\nMapa salvo em {output_file}.")
 
@@ -255,7 +255,7 @@ def _degree_offsets(radius_m: int, lat_center: float) -> Tuple[float, float]:
 
 
 def build_graph(
-    center: Tuple[int, int] = CENTER,
+    center: Tuple[float, float] = CENTER,
     dist: int = 12000,
 ) -> nx.MultiDiGraph:
     cache_dir = OUTPUT_DIR / "cache"
@@ -479,6 +479,19 @@ def print_route_stats(stats: Sequence[Tuple[int, float, float]]) -> None:
         f"{total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
         f"(Δ {delta / 1000:.2f} km, {pct:.1f}%)"
     )
+
+
+def next_available_map(output_dir: Path) -> Path:
+    base = output_dir / "map.html"
+    if not base.exists():
+        return base
+
+    idx = 1
+    while True:
+        candidate = output_dir / f"map_{idx}.html"
+        if not candidate.exists():
+            return candidate
+        idx += 1
 
 
 if __name__ == "__main__":
