@@ -33,7 +33,8 @@ uv run python -m route_planner --num-trucks 4 --num-deliveries 20 --radius-m 150
 - `--radius-m`: raio usado tanto para gerar os pontos quanto para baixar o grafo via OSMnx.
 - `--seed`: controla a geração pseudo-aleatória; se não for informado, o script
   escolhe uma semente aleatória automaticamente e informa no terminal.
-
+- Não há mais argumento para arquivo de grafo; o cache é sempre salvo em
+  `output/graph_cache` baseado no centro/raio.
 ### Camadas do mapa
 
 O HTML final inclui várias camadas no `LayerControl` para enxergar cada etapa dos
@@ -59,6 +60,13 @@ Além do mapa, o terminal imprime dois blocos com métricas:
 2. **Rotas** – comprimento real de cada rota na ordem original versus depois do
    2-opt (em quilômetros e porcentagem de ganho), junto com a sequência final
    das visitas.
+
+### Performance
+
+- Rotas são calculadas em paralelo por caminhão usando `ThreadPoolExecutor`.
+- OSMnx usa cache e o script também salva/recupera o grafo (formato gpickle) em
+  `output/graph_cache` (chaveando pelo centro/raio), evitando downloads
+  repetidos na mesma área.
 
 ## Personalização
 

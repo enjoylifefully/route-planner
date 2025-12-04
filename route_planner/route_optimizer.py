@@ -16,7 +16,6 @@ from .models import Delivery, Truck
 @dataclass(frozen=True)
 class RouteResult:
     nodes: List[int]
-    labels: List[str]
     distance_m: float
 
 
@@ -26,20 +25,22 @@ def build_route(
     """Resolve a ordem ótima de visitas usando 2-opt e retorna nós e etiquetas."""
 
     nodes = [nearest_node(graph, truck.lat, truck.lon)]
-    ordered_codes = [f"Saída {truck.name}"]
 
     for delivery in deliveries:
         nodes.append(nearest_node(graph, delivery.lat, delivery.lon))
-        ordered_codes.append(delivery.code)
+
+    if len(nodes) <= 2:
+        nodes = nodes + nodes[:1]
+        distance = compute_path_length(graph, nodes)
+        return RouteResult(nodes, distance)
 
     distance_matrix = compute_distance_matrix(graph, nodes)
     permutation, _ = solve_tsp_local_search(distance_matrix)
     ordered_indices = reorder_cycle(permutation, start_index=0)
 
     route_nodes = [nodes[idx] for idx in ordered_indices]
-    ordered_codes = [ordered_codes[idx] for idx in ordered_indices]
     distance = compute_path_length(graph, route_nodes)
-    return RouteResult(route_nodes, ordered_codes, distance)
+    return RouteResult(route_nodes, distance)
 
 
 def build_baseline_route(
@@ -48,16 +49,13 @@ def build_baseline_route(
     """Gera rota simples (ordem sequencial) para comparação com 2-opt."""
 
     nodes = [nearest_node(graph, truck.lat, truck.lon)]
-    ordered_codes = [f"Saída {truck.name}"]
 
     for delivery in deliveries:
         nodes.append(nearest_node(graph, delivery.lat, delivery.lon))
-        ordered_codes.append(delivery.code)
 
     nodes.append(nodes[0])
-    ordered_codes.append(ordered_codes[0])
     distance = compute_path_length(graph, nodes)
-    return RouteResult(nodes, ordered_codes, distance)
+    return RouteResult(nodes, distance)
 
 
 def nearest_node(graph: nx.MultiDiGraph, lat: float, lon: float) -> int:
@@ -67,16 +65,15 @@ def nearest_node(graph: nx.MultiDiGraph, lat: float, lon: float) -> int:
 def compute_distance_matrix(graph: nx.MultiDiGraph, nodes: Sequence[int]) -> np.ndarray:
     n_nodes = len(nodes)
     matrix = np.zeros((n_nodes, n_nodes), dtype=float)
-    for i in range(n_nodes):
+    for i, source in enumerate(nodes):
+        lengths = nx.single_source_dijkstra_path_length(graph, source, weight="length")
         for j in range(i + 1, n_nodes):
-            try:
-                length = nx.shortest_path_length(
-                    graph, nodes[i], nodes[j], weight="length"
-                )
-            except nx.NetworkXNoPath:
+            target = nodes[j]
+            length = lengths.get(target)
+            if length is None:
                 length = haversine(
-                    (graph.nodes[nodes[i]]["y"], graph.nodes[nodes[i]]["x"]),
-                    (graph.nodes[nodes[j]]["y"], graph.nodes[nodes[j]]["x"]),
+                    (graph.nodes[source]["y"], graph.nodes[source]["x"]),
+                    (graph.nodes[target]["y"], graph.nodes[target]["x"]),
                 )
             matrix[i, j] = matrix[j, i] = float(length)
     return matrix

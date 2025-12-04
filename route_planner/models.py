@@ -5,13 +5,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Truck:
-    name: str
+    code: int
     lat: float
     lon: float
 
 
 @dataclass(frozen=True)
 class Delivery:
-    code: str
+    code: int
     lat: float
     lon: float

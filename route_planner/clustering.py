@@ -14,12 +14,12 @@ def cluster_deliveries(
     *,
     random_state: int = 42,
 ) -> Tuple[Dict[int, List[Delivery]], np.ndarray]:
-    """Executa K-Means para dividir as entregas em ``n_clusters`` grupos."""
+    """Executa K-Means e devolve clusters e centróides."""
 
     coords = np.array([(d.lat, d.lon) for d in deliveries])
-    model = KMeans(n_clusters=n_clusters, n_init=10, random_state=random_state)
+    model = KMeans(n_clusters=n_clusters, n_init="auto", random_state=random_state)
     labels = model.fit_predict(coords)
     clusters: Dict[int, List[Delivery]] = {idx: [] for idx in range(n_clusters)}
     for label, delivery in zip(labels, deliveries):
-        clusters[label].append(delivery)
+        clusters[int(label)].append(delivery)
     return clusters, model.cluster_centers_
