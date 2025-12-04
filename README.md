@@ -1,10 +1,10 @@
-# Planejamento de rotas com K-Means e 2-opt
+# Planejamento de rotas com K-means e 2-opt
 
 Projeto em Python que cria um cenário simples de entregas em São Paulo com
 três caminhões. Os passos implementados são:
 
 - download da malha viária via **OSMnx**;
-- divisão dos pontos de entrega usando **K-Means** do scikit-learn;
+- divisão dos pontos de entrega usando **K-means** do scikit-learn;
 - otimização da ordem das entregas em cada cluster com **2-opt** (lib
   `python-tsp`);
 - renderização do resultado em um mapa **Folium** contendo depósitos, entregas
@@ -35,6 +35,7 @@ uv run python -m route_planner --num-trucks 4 --num-deliveries 20 --radius-m 150
   escolhe uma semente aleatória automaticamente e informa no terminal.
 - Não há mais argumento para arquivo de grafo; o cache é sempre salvo em
   `output/graph_cache` baseado no centro/raio.
+
 ### Camadas do mapa
 
 O HTML final inclui várias camadas no `LayerControl` para enxergar cada etapa dos
@@ -42,8 +43,8 @@ algoritmos:
 
 - **Pontos (sem rotas)**: depósitos e entregas em cinza.
 - **Clusters - distribuição inicial**: ligações (tracejadas) entre caminhões e
-  entregas antes de aplicar K-Means.
-- **Clusters - K-Means**: mesmas ligações, agora usando os grupos calculados.
+  entregas antes de aplicar K-means.
+- **Clusters - K-means**: mesmas ligações, agora usando os grupos calculados.
 - **Rotas - ordem sequencial**: caminho percorrido caso o caminhão siga a
   sequência original das entregas (pré 2-opt).
 - **Rotas - 2-opt**: resultado otimizando a ordem das visitas em cada grupo.
@@ -56,7 +57,7 @@ cada componente.
 Além do mapa, o terminal imprime dois blocos com métricas:
 
 1. **Agrupamento** – distância total (linha reta) caminhão→entregas antes e
-   depois do K-Means.
+   depois do K-means.
 2. **Rotas** – comprimento real de cada rota na ordem original versus depois do
    2-opt (em quilômetros e porcentagem de ganho), junto com a sequência final
    das visitas.
@@ -76,9 +77,9 @@ Além do mapa, o terminal imprime dois blocos com métricas:
   pseudo-aleatórias.
 - Use o parâmetro `--radius-m` ou edite a função `build_graph` se precisar de um
   recorte maior/menor do grafo do OSM.
-- Novos caminhões ou entregas são tratados automaticamente pelo K-Means (desde
+- Novos caminhões ou entregas são tratados automaticamente pelo K-means (desde
   que `n` ≥ `k`).
-- Os algoritmos estão modularizados: `clustering.py` concentra o K-Means e
+- Os algoritmos estão modularizados: `clustering.py` concentra o K-means e
   `route_optimizer.py` a etapa 2-opt, o que facilita substituições por outras
   abordagens caso necessário.
 - Todo o código da aplicação fica dentro da pasta `route_planner/`, deixando a

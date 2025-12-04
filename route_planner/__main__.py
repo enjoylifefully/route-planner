@@ -1,4 +1,4 @@
-"""Planejamento de rotas para k caminhões usando OSMnx, K-Means e 2-opt."""
+"""Planejamento de rotas para k caminhões usando OSMnx, K-means e 2-opt."""
 
 import argparse
 import os
@@ -161,7 +161,7 @@ def main() -> None:
         sys.stdout.write("\n")
         sys.stdout.flush()
 
-    print("[4/4] gerando mapa")
+    print("[4/4] Gerando mapa")
     print_cluster_stats(cluster_stats)
     print_route_stats(route_stats)
 
@@ -170,7 +170,7 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_file = OUTPUT_DIR / "map.html"
     folium_map.save(str(output_file))
-    print(f"Mapa salvo em {output_file}.")
+    print(f"\nMapa salvo em {output_file}.")
 
 
 def parse_args() -> argparse.Namespace:
@@ -456,38 +456,28 @@ def assignment_cost(truck: Truck, deliveries: Sequence[Delivery]) -> float:
 def print_cluster_stats(stats: Sequence[Tuple[int, float, float]]) -> None:
     if not stats:
         return
-    print("\nRandom vs K-means:")
+    print("\nAleatório vs K-means (total):")
     total_baseline = sum(b for _, b, _ in stats)
     total_optimized = sum(o for _, _, o in stats)
-    for truck_code, baseline_cost, optimized_cost in stats:
-        improvement = baseline_cost - optimized_cost
-        pct = (improvement / baseline_cost * 100) if baseline_cost else 0.0
-        print(
-            f"{truck_code}: {baseline_cost / 1000:.2f} km -> {optimized_cost / 1000:.2f} km "
-            f"(Δ {improvement / 1000:.2f} km, {pct:.1f}%)"
-        )
+    delta = total_baseline - total_optimized
+    pct = (delta / total_baseline * 100) if total_baseline else 0.0
     print(
-        f"Total: {total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
-        f"(Δ {(total_baseline - total_optimized) / 1000:.2f} km)"
+        f"{total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
+        f"(Δ {delta / 1000:.2f} km, {pct:.1f}%)"
     )
 
 
 def print_route_stats(stats: Sequence[Tuple[int, float, float]]) -> None:
     if not stats:
         return
-    print("\nSequencial vs 2-opt")
+    print("\nSequencial vs 2-opt (total):")
     total_baseline = sum(b for _, b, _ in stats)
     total_optimized = sum(o for _, _, o in stats)
-    for truck_code, baseline_len, optimized_len in stats:
-        improvement = baseline_len - optimized_len
-        pct = (improvement / baseline_len * 100) if baseline_len else 0.0
-        print(
-            f"{truck_code}: {baseline_len / 1000:.2f} km -> {optimized_len / 1000:.2f} km "
-            f"(Δ {improvement / 1000:.2f} km, {pct:.1f}%)"
-        )
+    delta = total_baseline - total_optimized
+    pct = (delta / total_baseline * 100) if total_baseline else 0.0
     print(
-        f"Total: {total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
-        f"(Δ {(total_baseline - total_optimized) / 1000:.2f} km)"
+        f"{total_baseline / 1000:.2f} km -> {total_optimized / 1000:.2f} km "
+        f"(Δ {delta / 1000:.2f} km, {pct:.1f}%)"
     )
 
 
