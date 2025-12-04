@@ -95,7 +95,7 @@ def main() -> None:
             baseline_deliveries,
             color,
             dash_array="6,6",
-            label_prefix="Random",
+            label_prefix="Aleatório",
         )
         plot_cluster_connections(
             kmeans_cluster_layer,
